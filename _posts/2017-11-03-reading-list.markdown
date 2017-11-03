@@ -3,7 +3,7 @@ layout: post
 title:  "Reading list"
 date:   2017-11-03 12:15:29 +0200
 categories: papers
-image: "https://jaakkotuosa.github.io/assets/images/screenshot.png"
+image: "https://jaakkotuosa.github.io/assets/images/screenshot.jpg"
 ---
 
 Here's a list of papers and blog posts I have been reading, so that I may find them again someday. And maybe you can find them too.
