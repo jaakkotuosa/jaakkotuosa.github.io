@@ -5,12 +5,3 @@
 layout: home
 image: "https://jaakkotuosa.github.io/assets/images/screenshot.jpg"
 ---
-
-<h3>Entries</h3>
-<ul>
-  {% for post in site.posts %}
-    <li>
-      <a href="{{ post.url }}">{{ post.title }}</a>
-    </li>
-  {% endfor %}
-</ul>
