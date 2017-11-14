@@ -14,12 +14,13 @@ because of the networks were able to learn long dependencies,
 for example closing tags in wikipedia syntax.
 So to get more familiar with LSTM I decided to try character by character text generation.
 
-I wanted to see how well models could reproduce nelipolvi trokee.
+I wanted to see how well models could reproduce Kalevala metre poetry.
 I found material from [Harri Perälä's website](http://www.sci.fi/~alboin/trokeemankeli/kalevalamitta-aineistoja.htm).
 Choosing [the stripped down version of Kalevala](http://www.iki.fi/harri.perala/trokeemankeli/kalevala_vain_sakeet.txt)
 and [Kanteletar](http://www.iki.fi/harri.perala/trokeemankeli/kanteletar_karsittu.txt) 
 I obtained [input material](./ainamoinen.txt) of around 1MB, not quite as large I was hoping for,
-but I decided to go with it.
+but I decided to go with it. To simplify the learning task, I lowercased the file and
+removed some accidental characters (like '<'). In the end the vocabulary size was 37 characters. 
 
 I was envisoning nice interactive demo where people could seed the text generation with their own phrases,
 and out comes Kalevala wisdom. After spending some time installing torch and other dependencies for char-rnn,
