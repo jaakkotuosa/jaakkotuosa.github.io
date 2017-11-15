@@ -1,1 +1,227 @@
-Kalevala poetry generator
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+      <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+      <script type="text/javascript" src="https://jaakkotuosa.github.io/ainamoinen/discrete.js"></script>
+      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script>
+      <!--script type="text/javascript" src="../keras-js/dist/keras.js"></script-->
+
+  <style type="text/css">
+    #userInput {
+  color: blue;
+}
+
+#predicted {
+  color: gray;
+}
+
+#readyText {
+  color: black;
+}
+
+body {
+  background-color: #faf4d7;
+  color: #5f2011;
+  margin-left: 10%;
+  margin-right: 10%;
+  font-family: serif;
+}
+
+div {
+  margin-top: 1em;
+}
+
+a {
+  color: inherit;
+}
+
+.content {
+  margin-left: 10%;
+}
+
+.decoration {
+  position: absolute;
+  top: 0px;
+  line-height: 75%;
+  margin-top: 0;
+  font-family: monospace;
+}
+
+#decorationLeft {
+  left: 10px;  
+}
+
+#decorationRight {
+  right: 10px;  
+}
+  </style>
+
+  <title>keras.js ainamoinen</title>
+
+  
+    
+
+
+
+
+<script type="text/javascript">//<![CDATA[
+window.onload=function(){
+const baseUrl = 'https://jaakkotuosa.github.io/ainamoinen/inference_model/';
+
+let model;
+let charToIndex;
+let indexToChar;
+
+function createDecoration() {
+  $('.decoration').html("|/\\|<br>|\\/|<br>".repeat(100));
+}
+
+function loadModel() {
+  createDecoration();
+
+  console.log("Loading model...");
+  model = new KerasJS.Model({
+    filepaths: {
+      model: baseUrl + 'inference_model.json',
+      weights: baseUrl + 'inference_model_weigths_weights.buf',
+      metadata: baseUrl +  'inference_model_weigths_metadata.json'
+    },
+    gpu: true
+  });
+  
+  let indicesLoaded = $.getJSON(baseUrl + 'id2char.json').promise();
+  indicesLoaded.then((indices) => {
+    indexToChar = indices;
+    charToIndex = {};
+    for (let i in indexToChar) {
+      charToIndex[indexToChar[i]] = i;
+    }
+    console.assert(Object.keys(indexToChar).length == Object.keys(charToIndex).length);
+  });
+  
+  Promise.all([model.ready(), indicesLoaded]).then(() => {
+    listenForChanges();
+    console.log("Ready to predict");
+  },
+  (err) => {
+      console.error("Error", err)
+  });
+}
+
+function listenForChanges() {
+
+  $('body').on('focus', '[contenteditable]', function() {
+    var $this = $(this);
+    $this.data('before', $this.html());
+    return $this;
+  }).on('blur keyup paste input', '[contenteditable]', function() {
+    var $this = $(this);
+    if ($this.data('before') !== $this.html()) {
+      $this.data('before', $this.html());
+      $this.trigger('change');
+    }
+    return $this;
+  });
+
+  $('#userInput').focus().on('change', function() {
+    if ($(this).html().endsWith("<br>")) {
+      let textToAdd = '';
+      if ($(this).text()) {
+      	textToAdd += $(this).text();
+        textToAdd += $('#predicted').text();
+      }
+      textToAdd += "<br/>";
+      $('#readyText').append(textToAdd);
+      $(this).html('');
+    } else {
+    	predict($(this).text());
+    }
+  }).trigger('change');
+}
+
+function sample(preds, temperature=1.0) {
+  for (let i = 0; i < preds.length; ++i) {
+    preds[i] = Math.exp(Math.log(preds[i]) / temperature);
+  }
+
+  let mult = SJS.Multinomial(1, preds);
+  let index = mult.draw().indexOf(1);
+  let c = indexToChar[index];
+  console.assert(charToIndex[c] == index);
+  //console.log("res", index, "'"+c+"'", preds)
+  return c;
+}
+
+function predict(inputText)
+{
+  $('#predicted').text('');
+  //model.clear();
+  //let inputNodeCount = onehot[tokens[0]].length 
+  let output;
+
+  const shape = model.inputTensors.input.tensor.shape;
+  console.assert(shape.length === 1);
+  const inputData = {
+    'input': new Float32Array(shape[0])
+  }
+  let offset = 0;
+  console.log("inputtext", inputText)
+  inputText.toLowerCase().split('').forEach(function(c) {
+  	if (c in charToIndex) {
+      inputData.input[offset] = charToIndex[c];
+      offset++;
+    } else {
+    	console.log("unsupported char", c)
+    }
+  });
+  
+  console.log(inputData.input)
+
+  if (offset === 0) {
+    // no valid chars, no prediction?
+  	//return;
+  }
+  
+  console.log("make pred");
+  // make predictions
+  //$('#predicted').html("foobar");
+
+  model.predict(inputData)
+    .then(outputData => {
+      $('#predicted').text(sample(outputData.output));
+    })
+    .catch(err => {
+      console.error("Error", err)
+    }); 
+
+}
+
+$(document).ready(loadModel);
+  
+}//]]> 
+
+</script>
+
+  
+</head>
+
+<body>
+  <h1>
+AInamoinen
+</h1>
+<div>
+Generating <a href="http://www.sci.fi/%7Ealboin/trokeemankeli/kalevalamitta-aineistoja.htm">Kalevala metre poetry</a> based on user input.
+Prediction is generated character-by-character with a LSTM network running in your browser with <a href="https://github.com/transcranial/keras-js">keras-js</a>. Read all about it <a href="post.html">here</a>. Please start typing below to create some new poetry:
+</div>
+<div id="readyText" class="content"></div>
+<div class="content">
+<span id="userInput" contenteditable="true"></span><span id="predicted">foobar</span>
+</div>
+<div id="decorationLeft" class="decoration"></div>
+<div id="decorationRight" class="decoration"></div>
+  
+</body></html>
