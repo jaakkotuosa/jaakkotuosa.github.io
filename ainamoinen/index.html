@@ -5,13 +5,14 @@
   <meta name="robots" content="noindex, nofollow">
   <meta name="googlebot" content="noindex, nofollow">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-      <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
-      <script type="text/javascript" src="https://jaakkotuosa.github.io/ainamoinen/discrete.js"></script>
-      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script>
-      <!--script type="text/javascript" src="../keras-js/dist/keras.js"></script-->
+  <title>AInamoinen</title>
+  <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script type="text/javascript" src="https://jaakkotuosa.github.io/ainamoinen/discrete.js"></script>
+  <!--script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script-->
+  <script type="text/javascript" src="../../keras-js/dist/keras.js"></script>
 
-  <style type="text/css">
-    #userInput {
+<style type="text/css">
+#userInput {
   color: blue;
 }
 
@@ -58,15 +59,23 @@ a {
 #decorationRight {
   right: 10px;  
 }
-  </style>
-
-  <title>keras.js ainamoinen</title>
-
-  
-    
-
-
-
+#temperatureSlider {
+  margin-left: 1em;
+  margin-right: 1em;
+  vertical-align: middle;
+}
+#temperatureDiv {
+  position: absolute;
+  bottom: 10%;
+  right: 10%;
+  border: 1px solid #5f2011;
+  border-radius: 1em;
+  padding: 1em;
+}
+#temperatureDiv h3 {
+  text-align: center;
+}
+</style>
 
 <script type="text/javascript">//<![CDATA[
 window.onload=function(){
@@ -75,6 +84,7 @@ const baseUrl = 'https://jaakkotuosa.github.io/ainamoinen/inference_model/';
 let model;
 let charToIndex;
 let indexToChar;
+let temperature=0.1;
 
 function createDecoration() {
   $('.decoration').html("|/\\|<br>|\\/|<br>".repeat(100));
@@ -87,12 +97,12 @@ function loadModel() {
   model = new KerasJS.Model({
     filepaths: {
       model: baseUrl + 'inference_model.json',
-      weights: baseUrl + 'inference_model_weigths_weights.buf',
-      metadata: baseUrl +  'inference_model_weigths_metadata.json'
+      weights: baseUrl + 'inference_model_weights_weights.buf',
+      metadata: baseUrl +  'inference_model_weights_metadata.json'
     },
     gpu: true
   });
-  
+
   let indicesLoaded = $.getJSON(baseUrl + 'id2char.json').promise();
   indicesLoaded.then((indices) => {
     indexToChar = indices;
@@ -104,12 +114,21 @@ function loadModel() {
   });
   
   Promise.all([model.ready(), indicesLoaded]).then(() => {
-    listenForChanges();
+    console.timeEnd("load")
     console.log("Ready to predict");
+    listenForChanges();
   },
   (err) => {
       console.error("Error", err)
   });
+}
+
+function clearModel() {
+  // reset variables LSTM.js seems to use for its stateful operation. Not used by other layers
+  for (let [k, v] of model.modelLayersMap) {
+    delete v.currentHiddenState;
+    delete v.previousCandidate;
+  }
 }
 
 function listenForChanges() {
@@ -138,66 +157,130 @@ function listenForChanges() {
       $('#readyText').append(textToAdd);
       $(this).html('');
     } else {
-    	predict($(this).text());
+        predict();
     }
-  }).trigger('change');
+  });
+
+  $('#temperatureSlider').on('change', function() {
+    temperature = $(this).val();
+    predict();
+  });
+
+  predict();
 }
 
-function sample(preds, temperature=1.0) {
+function sample(preds) {
+
+  let maxIndex = 0;
+  let maxValue = -1;
   for (let i = 0; i < preds.length; ++i) {
+    if (maxValue < preds[i]) {
+      maxValue = preds[i];
+      maxIndex = i;
+    }
     preds[i] = Math.exp(Math.log(preds[i]) / temperature);
   }
 
   let mult = SJS.Multinomial(1, preds);
   let index = mult.draw().indexOf(1);
   let c = indexToChar[index];
-  console.assert(charToIndex[c] == index);
-  //console.log("res", index, "'"+c+"'", preds)
+  //console.assert(charToIndex[c] == index);
+  //console.log("res", index, "'"+c+"'", maxIndex, '"' + indexToChar[maxIndex] + '"');
+
+  $('#second').append(c);
+  $('#third').append(indexToChar[maxIndex]);
+
   return c;
 }
 
-function predict(inputText)
+let predictionRunning = false;
+let abortPrediction = false;
+
+function predict()
 {
   $('#predicted').text('');
-  //model.clear();
-  //let inputNodeCount = onehot[tokens[0]].length 
-  let output;
+  $('#second').text('');
+  $('#third').text('');
+  let inputText = $('#userInput').html().toLowerCase().replace(/<br\/?>/g, '\n');
+  if (!inputText) {
+    return;
+  }
 
+  clearModel();
+
+  // check that we have 1-char inference model
   const shape = model.inputTensors.input.tensor.shape;
   console.assert(shape.length === 1);
+  console.assert(shape[0] === 1);
   const inputData = {
     'input': new Float32Array(shape[0])
   }
   let offset = 0;
+  predictionRunning = true;
   console.log("inputtext", inputText)
-  inputText.toLowerCase().split('').forEach(function(c) {
-  	if (c in charToIndex) {
-      inputData.input[offset] = charToIndex[c];
-      offset++;
-    } else {
-    	console.log("unsupported char", c)
+
+  function feedNext(outputData)
+  {
+    if (outputData) {
+      let c = sample(outputData.output);
+      //console.log("got feed output", c, c.charCodeAt(0));
     }
-  });
-  
-  console.log(inputData.input)
 
-  if (offset === 0) {
-    // no valid chars, no prediction?
-  	//return;
+    if (offset < inputText.length) {
+      let c = inputText[offset];
+      if (c in charToIndex) {
+        inputData.input[0] = charToIndex[c];
+      } else {
+        console.log("unsupported char", c)
+        inputData.input[0] = 0;
+      }
+      offset++;
+
+      console.log("feed", offset, c, inputData.input[0])
+      model.predict(inputData)
+        .then((outputData) => { setTimeout(() => { feedNext(outputData); }, 0); })
+        .catch(err => {
+          console.error("Error", err);
+          predictionRunning = false;
+        });
+    } else {
+      predictNext(outputData);
+    }
+
+    return outputData;
   }
-  
-  console.log("make pred");
-  // make predictions
-  //$('#predicted').html("foobar");
 
-  model.predict(inputData)
-    .then(outputData => {
-      $('#predicted').text(sample(outputData.output));
-    })
-    .catch(err => {
-      console.error("Error", err)
-    }); 
+  function predictNext(outputData)
+  {
+    let c = sample(outputData.output);
 
+    //console.log("got predict output", c, c.charCodeAt(0));
+
+    // predict until next line end, or abort if there is none
+    if ((c === '\n') || ($('#predicted').text().length > 255)) {
+      $('#predicted').append("<br/>");
+      predictionRunning = false;
+      return;
+    } else {
+      $('#predicted').append(c);
+    }
+
+    inputData.input[0] = charToIndex[c];
+
+    console.assert(indexToChar[inputData.input[0]] == c);
+    console.log("drive", offset, c, inputData.input[0])
+
+    model.predict(inputData)
+      .then((outputData) => { setTimeout(() => { predictNext(outputData); }, 0); })
+      .catch(err => {
+        console.error("Error", err)
+        predictionRunning = false;
+      });
+
+    return outputData;
+  }
+
+  feedNext();
 }
 
 $(document).ready(loadModel);
@@ -211,17 +294,26 @@ $(document).ready(loadModel);
 
 <body>
   <h1>
-AInamoinen
-</h1>
-<div>
-Generating <a href="http://www.sci.fi/%7Ealboin/trokeemankeli/kalevalamitta-aineistoja.htm">Kalevala metre poetry</a> based on user input.
-Prediction is generated character-by-character with a LSTM network running in your browser with <a href="https://github.com/transcranial/keras-js">keras-js</a>. Read all about it <a href="post.html">here</a>. Please start typing below to create some new poetry:
-</div>
-<div id="readyText" class="content"></div>
-<div class="content">
-<span id="userInput" contenteditable="true"></span><span id="predicted">foobar</span>
-</div>
-<div id="decorationLeft" class="decoration"></div>
-<div id="decorationRight" class="decoration"></div>
-  
-</body></html>
+    AInamoinen
+  </h1>
+  <div>
+    Generating Finnish Kalevala metre poetry based on user input.
+    Prediction is generated character-by-character with a LSTM network running in your browser with <a href="https://github.com/transcranial/keras-js">keras-js</a>.
+    Read all about it <a href="post.html">here</a>. Please start typing below to create some new poetry:
+  </div>
+  <div id="temperatureDiv">
+    <h3>Artistic freedom<h3>
+    <div>
+      None<input id="temperatureSlider" type="range" min=0.01 value=0.1 max=2 step="any"/>Too much
+    </div>
+  </div>
+  <div id="readyText" class="content"></div>
+  <div class="content">
+    <span id="userInput" contenteditable="true"></span><span id="predicted"></span>
+  </div>
+  <div id="second"></div>
+  <div id="third"></div>
+  <div id="decorationLeft" class="decoration"></div>
+  <div id="decorationRight" class="decoration"></div>
+</body>
+</html>
