@@ -48,7 +48,12 @@ Being interested in long term capabilities (for example opening and closing long
 I tried to turn it stateful. On the surface, in Keras this would seem to mean that one would need to use the same batch size
 in training and in evaluation. 
 For evaluation batch size 1 would be most suited, but for training that would be rather slow.
+
 Luckily [yxtay](https://github.com/yxtay/char-rnn-text-generation) had realized how to work modify input shape for the evalution.
+Unfortunately, keras-js could not load the small modified inference networks I exported from Keras.
+After some debugging with local keras-js it turned out that weight names did have additional postfix "_1"
+that keras-js did not expect. One probably could export the keras model somehow smartes,
+but I resorted to removing offending postfix from json with sed.
 
 While trying these different starting points I ran the training quite many times with different hyperparameters.
 Two times I even got the model to diverge when using RMSprop optimizer, Adam seemed to work quite well out of the box 
