@@ -9,7 +9,7 @@
   <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
   <script type="text/javascript" src="https://jaakkotuosa.github.io/ainamoinen/discrete.js"></script>
   <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script>
-  <!--script type="text/javascript" src="../../keras-js/dist/keras.js"></script-->
+  <script type="text/javascript" src="model.js"></script>
 
 <style type="text/css">
 #userInput {
@@ -78,263 +78,124 @@ a {
 </style>
 
 <script type="text/javascript">//<![CDATA[
-window.onload=function(){
-const baseUrl = 'https://jaakkotuosa.github.io/ainamoinen/inference_model/';
 
-let model;
-let charToIndex;
-let indexToChar;
-let temperature=0.1;
+let model = new Model()
 
-function createDecoration() {
-  $('.decoration').html("|/\\|<br>|\\/|<br>".repeat(100));
+function createDecoration () {
+  $('.decoration').html('|/\\|<br>|\\/|<br>'.repeat(100))
 }
 
-function loadModel() {
-  createDecoration();
-
-  console.log("Loading model...");
-  model = new KerasJS.Model({
-    filepaths: {
-      model: baseUrl + 'inference_model.json',
-      weights: baseUrl + 'inference_model_weights_weights.buf',
-      metadata: baseUrl +  'inference_model_weights_metadata.json'
-    },
-    gpu: true
-  });
-
-  let indicesLoaded = $.getJSON(baseUrl + 'id2char.json').promise();
-  indicesLoaded.then((indices) => {
-    indexToChar = indices;
-    charToIndex = {};
-    for (let i in indexToChar) {
-      charToIndex[indexToChar[i]] = i;
-    }
-    console.assert(Object.keys(indexToChar).length == Object.keys(charToIndex).length);
-  });
-  
-  Promise.all([model.ready(), indicesLoaded]).then(() => {
-    console.timeEnd("load")
-    console.log("Ready to predict");
-    listenForChanges();
-  },
-  (err) => {
-      console.error("Error", err)
-  });
-}
-
-function clearModel() {
-  // reset variables LSTM.js seems to use for its stateful operation. Not used by other layers
-  for (let [k, v] of model.modelLayersMap) {
-    delete v.currentHiddenState;
-    delete v.previousCandidate;
-  }
-}
-
-KerasJS.Tensor.prototype.deepCopy = function() {
-  return new KerasJS.Tensor(this.tensor.data, [this.tensor.shape[0]]);
-};
-
-function saveModelState() {
-  let cache = {};
-  for (let [k, v] of model.modelLayersMap) {
-    if (v.currentHiddenState || v.previousCandidate) {
-      cache[k] = {state: v.currentHiddenState.deepCopy(), candidate: v.previousCandidate.deepCopy()};
-    }
-  }
-  return cache;
-}
-
-function loadModelState(cache) {
-  for (let [k, v] of model.modelLayersMap) {
-    if (cache[k]) {
-      v.currentHiddenState.replaceTensorData(cache[k].state.tensor.data);
-      v.previousCandidate.replaceTensorData(cache[k].candidate.tensor.data);
-    }
-  }
-}
-
-function listenForChanges() {
-
+function listenForChanges () {
   $('body').on('focus', '[contenteditable]', function() {
-    var $this = $(this);
-    $this.data('before', $this.html());
-    return $this;
+    var $this = $(this)
+    $this.data('before', $this.html())
+    return $this
   }).on('blur keyup paste input', '[contenteditable]', function() {
-    var $this = $(this);
+    var $this = $(this)
     if ($this.data('before') !== $this.html()) {
-      $this.data('before', $this.html());
-      $this.trigger('change');
+      $this.data('before', $this.html())
+      $this.trigger('change')
     }
-    return $this;
-  });
+    return $this
+  })
 
   $('#userInput').focus().on('change', function() {
     if ($(this).html().endsWith("<br>")) {
-      let textToAdd = '';
+      let textToAdd = ''
       if ($(this).text()) {
-      	textToAdd += $(this).text();
-        textToAdd += $('#predicted').text();
+        textToAdd += $(this).text()
+        textToAdd += $('#predicted').text()
       }
-      textToAdd += "<br/>";
-      $('#readyText').append(textToAdd);
-      $(this).html('');
+      textToAdd += "<br/>"
+      $('#readyText').append(textToAdd)
+      $(this).html('')
     } else {
-        predict();
+      predict()
     }
-  });
+  })
 
   $('#temperatureSlider').on('change', function() {
-    temperature = $(this).val();
-    predict();
-  });
+    model.setTemperature($(this).val())
+    predict()
+  })
 
-  predict();
+  predict()
 }
 
-function sample(preds) {
+function asyncGen(makeGenerator){
+  return function () {
+    var generator = makeGenerator.apply(this, arguments);
 
-  let maxIndex = 0;
-  let maxValue = -1;
-  for (let i = 0; i < preds.length; ++i) {
-    if (maxValue < preds[i]) {
-      maxValue = preds[i];
-      maxIndex = i;
+    function handle(result){
+      // result => { done: [Boolean], value: [Object] }
+      if (result.done) return Promise.resolve(result.value);
+
+      return Promise.resolve(result.value).then(function (res){
+        return handle(generator.next(res));
+      }, function (err){
+        return handle(generator.throw(err));
+      });
     }
-    preds[i] = Math.exp(Math.log(preds[i]) / temperature);
+
+    try {
+      return handle(generator.next());
+    } catch (ex) {
+      return Promise.reject(ex);
+    }
   }
-
-  let mult = SJS.Multinomial(1, preds);
-  let index = mult.draw().indexOf(1);
-  let c = indexToChar[index];
-  //console.assert(charToIndex[c] == index);
-  //console.log("res", index, "'"+c+"'", maxIndex, '"' + indexToChar[maxIndex] + '"');
-
-  $('#second').append(c);
-  $('#third').append(indexToChar[maxIndex]);
-
-  return c;
 }
-
-let predictionRunning = false;
-let abortPrediction = false;
 
 function predict()
 {
-  if (predictionRunning) {
-    return;
-  }
-  $('#predicted').text('');
-  $('#second').text('');
-  $('#third').text('');
+  $('#predicted').text('')
+  $('#second').text('')
+  $('#third').text('')
 
-  let inputText;
-  let cache;
+  let inputText
+  let cache
   if (!cache) {
-    inputText = $('#readyText').html();
+    inputText = $('#readyText').html()
   } else {
-    inputText = $('#userInput').html();
+    inputText = $('#userInput').html()
   }
-  inputText = inputText.toLowerCase().replace(/<br\/?>/g, '\n');
+  inputText = inputText.toLowerCase().replace(/<br\/?>/g, '\n')
   if (!inputText) {
-    return;
+    return
   }
 
- // clearModel();
 
-  // check that we have 1-char inference model
-  const shape = model.inputTensors.input.tensor.shape;
-  console.assert(shape.length === 1);
-  console.assert(shape[0] === 1);
-  const inputData = {
-    'input': new Float32Array(shape[0])
-  }
-  let offset = 0;
-  predictionRunning = true;
-  console.log("inputtext", inputText)
-
-  function feedNext(outputData)
-  {
-    let c = inputText[offset];
-    if (outputData) {
-      c = sample(outputData.output);
-      console.log("got feed output", c, c.charCodeAt(0));
-    }
-
-    if (offset < inputText.length) {
-      if (c in charToIndex) {
-        inputData.input[0] = charToIndex[c];
-      } else {
-        console.log("unsupported char", c)
-        inputData.input[0] = 0;
+  console.log('inputtext', inputText)
+  let prediction = model.predict(inputText)
+  let step = () => {
+     let res = prediction.next();
+     if (res.done) {
+        return;
+     }
+     console.log("res", typeof res, res)
+     res.value.then((c) => {
+      if (c === '\n') {
+        c = '<br/>'
       }
-      offset++;
 
-      console.log("feed", offset, c, inputData.input[0])
-      model.predict(inputData)
-        .then((outputData) => { setTimeout(() => { feedNext(outputData); }, 0); })
-        .catch(err => {
-          console.error("Error", err);
-          predictionRunning = false;
-        });
-    } else {
-      predictNext(outputData);
-    }
+      console.log("++++++++++++++++++", c)
+      $('#second').append(c)
+      $('#predicted').append(c)
+      setTimeout(step, 0);
+    });
 
-    return outputData;
+
   }
 
-  function predictNext(outputData)
-  {
-    if (!cache) {
-      //let cache = saveModelState();
-      //console.log("Cache", JSON.stringify(cache));
-      console.log("start prediction--------------------")
-      cache = 1;
-    }
+  step()
 
-    let c = sample(outputData.output);
-
-    //console.log("got predict output", c, c.charCodeAt(0));
-
-    // predict until next line end, or abort if there is none
-    if (c === '\n') {
-      $('#predicted').append("<br/>");
-      //predictionRunning = false;
-      //let cache = saveModelState();
-      //return;
-    } else {
-      $('#predicted').append(c);
-    }
-
-    if ($('#predicted').text().length > 255) {
-      $('#predicted').append("<br/>");
-      predictionRunning = false;
-      return;
-    }
-
-    inputData.input[0] = charToIndex[c];
-
-    console.assert(indexToChar[inputData.input[0]] == c);
-    console.log("drive", c, inputData.input[0])
-
-    model.predict(inputData)
-      .then((outputData) => { setTimeout(() => { predictNext(outputData); }, 0); })
-      .catch(err => {
-        console.error("Error", err)
-        predictionRunning = false;
-      });
-
-    return outputData;
-  }
-
-  feedNext();
 }
 
-$(document).ready(loadModel);
-  
-}//]]> 
-
+$(document).ready(function () {
+  createDecoration();
+  console.log("type asyncGen", typeof asyncGen)
+  model.loadModel('https://jaakkotuosa.github.io/ainamoinen/inference_model/').then(listenForChanges)
+})
+//]]>
 </script>
 
   
