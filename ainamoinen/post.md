@@ -55,6 +55,22 @@ After some debugging with local keras-js it turned out that weight names did hav
 that keras-js did not expect. One probably could export the keras model somehow smartes,
 but I resorted to removing offending postfix from json with sed.
 
+State initialization was tricky. Keras does not export state, and what would be good state anyway?
+With state initialized to zero the output was a mess for 20 or so first characters,
+after which model started producing sensible output.
+
+Interestingly, feeding valid seed text does not help. Only feeding the garbled output back in, the output becomes sensible.
+This makes sense as this is how network has learned to bootstrap it's state during training.
+For this stateful model initial wrong results are not that serious as it affects only the beginning, some 0.0001% of predictions.
+This generates two hypotheses for later use:
+Hypothesis 1: For stateless model, that has to init the state for every patch, the learning would probably drive the bootstrap happening faster.
+Hypothesis 2: Some start-of-sequence marker could trigger more efficient init.
+
+
+
+Plan: take snapshot of sensible state ending with ".\n" and use that as starting state.
+Plan: cache state in the end of seed text.
+
 While trying these different starting points I ran the training quite many times with different hyperparameters.
 Two times I even got the model to diverge when using RMSprop optimizer, Adam seemed to work quite well out of the box 
 (as advertized by [Andrew Ng](https://www.coursera.org/learn/deep-neural-network) ).

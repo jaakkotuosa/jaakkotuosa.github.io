@@ -8,8 +8,8 @@
   <title>AInamoinen</title>
   <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
   <script type="text/javascript" src="https://jaakkotuosa.github.io/ainamoinen/discrete.js"></script>
-  <!--script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script-->
-  <script type="text/javascript" src="../../keras-js/dist/keras.js"></script>
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script>
+  <!--script type="text/javascript" src="../../keras-js/dist/keras.js"></script-->
 
 <style type="text/css">
 #userInput {
@@ -131,6 +131,29 @@ function clearModel() {
   }
 }
 
+KerasJS.Tensor.prototype.deepCopy = function() {
+  return new KerasJS.Tensor(this.tensor.data, [this.tensor.shape[0]]);
+};
+
+function saveModelState() {
+  let cache = {};
+  for (let [k, v] of model.modelLayersMap) {
+    if (v.currentHiddenState || v.previousCandidate) {
+      cache[k] = {state: v.currentHiddenState.deepCopy(), candidate: v.previousCandidate.deepCopy()};
+    }
+  }
+  return cache;
+}
+
+function loadModelState(cache) {
+  for (let [k, v] of model.modelLayersMap) {
+    if (cache[k]) {
+      v.currentHiddenState.replaceTensorData(cache[k].state.tensor.data);
+      v.previousCandidate.replaceTensorData(cache[k].candidate.tensor.data);
+    }
+  }
+}
+
 function listenForChanges() {
 
   $('body').on('focus', '[contenteditable]', function() {
@@ -198,15 +221,26 @@ let abortPrediction = false;
 
 function predict()
 {
+  if (predictionRunning) {
+    return;
+  }
   $('#predicted').text('');
   $('#second').text('');
   $('#third').text('');
-  let inputText = $('#userInput').html().toLowerCase().replace(/<br\/?>/g, '\n');
+
+  let inputText;
+  let cache;
+  if (!cache) {
+    inputText = $('#readyText').html();
+  } else {
+    inputText = $('#userInput').html();
+  }
+  inputText = inputText.toLowerCase().replace(/<br\/?>/g, '\n');
   if (!inputText) {
     return;
   }
 
-  clearModel();
+ // clearModel();
 
   // check that we have 1-char inference model
   const shape = model.inputTensors.input.tensor.shape;
@@ -221,13 +255,13 @@ function predict()
 
   function feedNext(outputData)
   {
+    let c = inputText[offset];
     if (outputData) {
-      let c = sample(outputData.output);
-      //console.log("got feed output", c, c.charCodeAt(0));
+      c = sample(outputData.output);
+      console.log("got feed output", c, c.charCodeAt(0));
     }
 
     if (offset < inputText.length) {
-      let c = inputText[offset];
       if (c in charToIndex) {
         inputData.input[0] = charToIndex[c];
       } else {
@@ -252,23 +286,37 @@ function predict()
 
   function predictNext(outputData)
   {
+    if (!cache) {
+      //let cache = saveModelState();
+      //console.log("Cache", JSON.stringify(cache));
+      console.log("start prediction--------------------")
+      cache = 1;
+    }
+
     let c = sample(outputData.output);
 
     //console.log("got predict output", c, c.charCodeAt(0));
 
     // predict until next line end, or abort if there is none
-    if ((c === '\n') || ($('#predicted').text().length > 255)) {
+    if (c === '\n') {
+      $('#predicted').append("<br/>");
+      //predictionRunning = false;
+      //let cache = saveModelState();
+      //return;
+    } else {
+      $('#predicted').append(c);
+    }
+
+    if ($('#predicted').text().length > 255) {
       $('#predicted').append("<br/>");
       predictionRunning = false;
       return;
-    } else {
-      $('#predicted').append(c);
     }
 
     inputData.input[0] = charToIndex[c];
 
     console.assert(indexToChar[inputData.input[0]] == c);
-    console.log("drive", offset, c, inputData.input[0])
+    console.log("drive", c, inputData.input[0])
 
     model.predict(inputData)
       .then((outputData) => { setTimeout(() => { predictNext(outputData); }, 0); })
@@ -307,7 +355,7 @@ $(document).ready(loadModel);
       None<input id="temperatureSlider" type="range" min=0.01 value=0.1 max=2 step="any"/>Too much
     </div>
   </div>
-  <div id="readyText" class="content"></div>
+  <div id="readyText" class="content">Mieleni minun tekevi,<br/>aivoni ajattelevi<br/>lähteäni laulamahan,<br/>saa'ani sanelemahan,<br/>sukuvirttä suoltamahan,<br/> lajivirttä laulamahan.<br/></div>
   <div class="content">
     <span id="userInput" contenteditable="true"></span><span id="predicted"></span>
   </div>
