@@ -5,7 +5,7 @@ image: "https://jaakkotuosa.github.io/assets/images/screenshot.jpg"
 
 # AInamoinen - Kalevala text generation
 
-## Demo
+See the demo [here](index.html).
 
 ## Background story
 
@@ -13,8 +13,16 @@ I was intriqued by [Andrej Karpathy's text generation samples](http://karpathy.g
 because of the networks were able to learn long dependencies,
 for example closing tags in wikipedia syntax.
 So to get more familiar with LSTM I decided to try character by character text generation.
-
 I wanted to see how well models could reproduce Kalevala metre poetry.
+
+## Idea
+I was envisoning nice interactive demo where people could seed the text generation with their own phrases,
+and out comes Kalevala wisdom. After spending some time installing torch and other dependencies for char-rnn,
+I started to appreciate that none of my contacts would be able to run a demo that 
+would require Ubuntu and these requirements.
+I needed an online demo. And browser-side demo would be simpler to deploy.
+
+## Input data
 I found material from [Harri Perälä's website](http://www.sci.fi/~alboin/trokeemankeli/kalevalamitta-aineistoja.htm).
 Choosing [the stripped down version of Kalevala](http://www.iki.fi/harri.perala/trokeemankeli/kalevala_vain_sakeet.txt)
 and [Kanteletar](http://www.iki.fi/harri.perala/trokeemankeli/kanteletar_karsittu.txt) 
@@ -22,12 +30,30 @@ I obtained [input material](./ainamoinen.txt) of around 1MB, not quite as large 
 but I decided to go with it. To simplify the learning task, I lowercased the file and
 removed some accidental characters (like '<'). In the end the vocabulary size was 37 characters. 
 
-I was envisoning nice interactive demo where people could seed the text generation with their own phrases,
-and out comes Kalevala wisdom. After spending some time installing torch and other dependencies for char-rnn,
-I started to appreciate that none of my contacts would be able to run a demo that 
-would require Ubuntu and these requirements.
-I needed an online demo. And browser-side demo would be simpler to deploy.
+## Training
+During the process I ran the training quite many times with different hyperparameters.
+Two times I even got the model to diverge when using RMSprop optimizer, Adam seemed to work quite well out of the box 
+(as advertized by [Andrew Ng](https://www.coursera.org/learn/deep-neural-network) ).
 
+I was focusing quite a lot how well the models could correctly open and close quotes.
+I was expecting something like:
+
+> itse lausui, noin nimesi:
+> "mi sinä olet miehiäsi,
+> ku, kurja, urohiasi?
+> vähän kuollutta parempi,
+> katonutta kaunihimpi!"
+> sanoi pikku mies merestä,
+
+To my dismay even larger and deeper model failed to produce ':\n"' sequences,
+or place the closing quotes before next quote.
+ 
+I was also wondering why model insisted adding '--' or '...' every now and then,
+and, right on, some of the input lines had these strings.
+After this I checked the quotations in input, and yes, only some of them followed the pattern I was expecting.
+The models were, it seems, doing quite nicely.
+
+## Implementing the demo
 Now, the browser-side JS neural networks do sound fancy, but the evaluation evaluation of the model shouldn't be that heavy,
 and for my demo the speed would not be that crucial. It wouldn't be bad
 if the user saw the computer to write the text character by character. 
@@ -55,6 +81,7 @@ After some debugging with local keras-js it turned out that weight names did hav
 that keras-js did not expect. One probably could export the keras model somehow smartes,
 but I resorted to removing offending postfix from json with sed.
 
+### State management
 State initialization was tricky. Keras does not export state, and what would be good state anyway?
 With state initialized to zero the output was a mess for 20 or so first characters,
 after which model started producing sensible output.
@@ -66,29 +93,16 @@ This generates two hypotheses for later use:
 Hypothesis 1: For stateless model, that has to init the state for every patch, the learning would probably drive the bootstrap happening faster.
 Hypothesis 2: Some start-of-sequence marker could trigger more efficient init.
 
+I ended up saving one assumed good state in json and initializing the model with that.
+Then in the end of accepted line I save the model state and use that as initial state for next line.
 
+## Failure
+After the state management and number of bugs had been cleared I was eager to try it out.
+Unfortunately the output looked very much like the model is not listening the used input.
+The model being stateful means that during the training it practically always has the context from the previous words and sentences.
+Also, during training the model never needs to adapt to novel seed texts.
+So in short model is not trained to the interactive demo case. Quite classical mistake.
 
-Plan: take snapshot of sensible state ending with ".\n" and use that as starting state.
-Plan: cache state in the end of seed text.
-
-While trying these different starting points I ran the training quite many times with different hyperparameters.
-Two times I even got the model to diverge when using RMSprop optimizer, Adam seemed to work quite well out of the box 
-(as advertized by [Andrew Ng](https://www.coursera.org/learn/deep-neural-network) ).
-
-I was focusing quite a lot how well the models could correctly open and close quotes.
-I was expecting something like:
-
-> itse lausui, noin nimesi:
-> "mi sinä olet miehiäsi,
-> ku, kurja, urohiasi?
-> vähän kuollutta parempi,
-> katonutta kaunihimpi!"
-> sanoi pikku mies merestä,
-
-To my dismay even larger and deeper model failed to produce ':\n"' sequences,
-or place the closing quotes before next quote.
- 
-I was also wondering why model insisted adding '--' or '...' every now and then,
-and, right on, some of the input lines had these strings.
-After this I checked the quotations in input, and yes, only some of them followed the pattern I was expecting.
-The models were, it seems, doing quite nicely.
+## Next
+The stateful model can generate nice Kalevala text, so I think I'll keep it there, but next I'll revert back to stateless model
+and see if that is more responsive to user input.

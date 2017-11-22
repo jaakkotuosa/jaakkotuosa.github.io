@@ -14,6 +14,8 @@
 <style type="text/css">
 #userInput {
   color: blue;
+  border-bottom: 1px solid gray;
+  padding-left: 2px;
 }
 
 #predicted {
@@ -45,7 +47,7 @@ a {
 }
 
 .decoration {
-  position: absolute;
+  position: fixed;
   top: 0px;
   line-height: 75%;
   margin-top: 0;
@@ -65,7 +67,7 @@ a {
   vertical-align: middle;
 }
 #temperatureDiv {
-  position: absolute;
+  position: fixed;
   bottom: 10%;
   right: 10%;
   border: 1px solid #5f2011;
@@ -74,6 +76,9 @@ a {
 }
 #temperatureDiv h3 {
   text-align: center;
+}
+#activeText {
+  margin-top: 0em;
 }
 </style>
 
@@ -100,15 +105,11 @@ function listenForChanges () {
   })
 
   $('#userInput').focus().on('change', function() {
-    if ($(this).html().endsWith("<br>")) {
-      let textToAdd = ''
-      if ($(this).text()) {
-        textToAdd += $(this).text()
-        textToAdd += $('#predicted').text()
-      }
-      textToAdd += "<br/>"
+    if ($(this).html().includes('<br>')) {
+      let textToAdd = $(this).text() + $('#predicted').text() + "<br/>"
       $('#readyText').append(textToAdd)
       $(this).html('')
+      model.startPredictionsFromCurrentState()
     } else {
       predict()
     }
@@ -116,83 +117,56 @@ function listenForChanges () {
 
   $('#temperatureSlider').on('change', function() {
     model.setTemperature($(this).val())
+    $('#userInput').focus()
     predict()
   })
 
   predict()
 }
 
-function asyncGen(makeGenerator){
-  return function () {
-    var generator = makeGenerator.apply(this, arguments);
-
-    function handle(result){
-      // result => { done: [Boolean], value: [Object] }
-      if (result.done) return Promise.resolve(result.value);
-
-      return Promise.resolve(result.value).then(function (res){
-        return handle(generator.next(res));
-      }, function (err){
-        return handle(generator.throw(err));
-      });
-    }
-
-    try {
-      return handle(generator.next());
-    } catch (ex) {
-      return Promise.reject(ex);
-    }
-  }
-}
-
 function predict()
 {
   $('#predicted').text('')
-  $('#second').text('')
-  $('#third').text('')
 
-  let inputText
-  let cache
-  if (!cache) {
-    inputText = $('#readyText').html()
-  } else {
-    inputText = $('#userInput').html()
-  }
-  inputText = inputText.toLowerCase().replace(/<br\/?>/g, '\n')
-  if (!inputText) {
-    return
-  }
-
+  let inputText = $('#userInput').text()
+  inputText = inputText.toLowerCase()
+  // replace &nbsp with normal space
+  inputText = inputText.replace(/\u00A0/g, ' ')
 
   console.log('inputtext', inputText)
-  let prediction = model.predict(inputText)
-  let step = () => {
-     let res = prediction.next();
-     if (res.done) {
-        return;
-     }
-     console.log("res", typeof res, res)
-     res.value.then((c) => {
-      if (c === '\n') {
-        c = '<br/>'
+  const prediction = model.predict(inputText)
+  const step = (previousC) => {
+    const res = prediction.next(previousC);
+    if (res.done) {
+      return;
+    }
+    res.value.promise.then((c) => {
+      if (res.value.isPredicted) {
+        if (c === '\n') {
+          if ($('#predicted').text()) {
+            // avoid adding empty prediction
+            $('#predicted').append('<br/>')
+            step(null)
+          }
+        } else {
+          if (c === ' ') {
+            $('#predicted').append('&nbsp;')
+          } else {
+            $('#predicted').append(c)
+          }
+        }
       }
-
-      console.log("++++++++++++++++++", c)
       $('#second').append(c)
-      $('#predicted').append(c)
-      setTimeout(step, 0);
+      setTimeout(() => step(c), 0)
     });
-
-
   }
 
   step()
-
 }
 
 $(document).ready(function () {
+  $('#userInput').focus()
   createDecoration();
-  console.log("type asyncGen", typeof asyncGen)
   model.loadModel('https://jaakkotuosa.github.io/ainamoinen/inference_model/').then(listenForChanges)
 })
 //]]>
@@ -206,8 +180,8 @@ $(document).ready(function () {
     AInamoinen
   </h1>
   <div>
-    Generating Finnish Kalevala metre poetry based on user input.
-    Prediction is generated character-by-character with a LSTM network running in your browser with <a href="https://github.com/transcranial/keras-js">keras-js</a>.
+    Generates Finnish Kalevala metre poetry based on user input.
+    The text is generated character-by-character with a LSTM network running in your browser with <a href="https://github.com/transcranial/keras-js">keras-js</a>.
     Read all about it <a href="post.html">here</a>. Please start typing below to create some new poetry:
   </div>
   <div id="temperatureDiv">
@@ -216,12 +190,10 @@ $(document).ready(function () {
       None<input id="temperatureSlider" type="range" min=0.01 value=0.1 max=2 step="any"/>Too much
     </div>
   </div>
-  <div id="readyText" class="content">Mieleni minun tekevi,<br/>aivoni ajattelevi<br/>lähteäni laulamahan,<br/>saa'ani sanelemahan,<br/>sukuvirttä suoltamahan,<br/> lajivirttä laulamahan.<br/></div>
-  <div class="content">
-    <span id="userInput" contenteditable="true"></span><span id="predicted"></span>
+  <div id="readyText" class="content"></div>
+  <div id="activeText" class="content">
+    <span id="userInput" contenteditable="true" spellcheck="false"></span><span id="predicted"></span>
   </div>
-  <div id="second"></div>
-  <div id="third"></div>
   <div id="decorationLeft" class="decoration"></div>
   <div id="decorationRight" class="decoration"></div>
 </body>
