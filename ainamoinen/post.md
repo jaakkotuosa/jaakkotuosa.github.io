@@ -5,7 +5,7 @@ image: "https://jaakkotuosa.github.io/assets/images/screenshot.jpg"
 
 # AInamoinen - Kalevala text generation
 
-See the demo [here](index.html).
+See the demo [here](index.html). This post describes my learning exprience making this demo.
 
 ## Background story
 
@@ -96,13 +96,31 @@ Hypothesis 2: Some start-of-sequence marker could trigger more efficient init.
 I ended up saving one assumed good state in json and initializing the model with that.
 Then in the end of accepted line I save the model state and use that as initial state for next line.
 
-## Failure
+## Finding out the mistake
 After the state management and number of bugs had been cleared I was eager to try it out.
 Unfortunately the output looked very much like the model is not listening the used input.
 The model being stateful means that during the training it practically always has the context from the previous words and sentences.
 Also, during training the model never needs to adapt to novel seed texts.
 So in short model is not trained to the interactive demo case. Quite classical mistake.
 
-## Next
-The stateful model can generate nice Kalevala text, so I think I'll keep it there, but next I'll revert back to stateless model
-and see if that is more responsive to user input.
+## Evaluation
+The stateful model can generate nice Kalevala text.
+The alliterations for single lines are kind of ok.
+The model doesn't seem to obey the more advanced rule
+of saying the same thing on two consequtive lines,
+but using synonyms on the second line.
+I can forgive this already due to the small size of the input,
+and I don't know what kind model it would take to actually learn this dialect of Finnish.
+
+So, I think I'll keep the stateful demo there,
+but next I'll train some stateless model
+and see if that is more responsive to the user input.
+
+## Double checking
+Now, to avoid similar mistakes again, what does this demo need?
+A model to complete the lines that start with a seed text.
+So I think the training sequences should start from the beginning of a new line,
+as this is the situation the model will see in the demo.
+This would however undermine learning inter-line dependencies, like usage of : and ",
+but oh well, those were poorly used in input text as well.
+
