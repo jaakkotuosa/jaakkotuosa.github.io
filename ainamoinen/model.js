@@ -13,9 +13,12 @@ class Model {
     this.isInInitialCondition = true
   }
 
-  loadModel (baseUrl) {
+  // stateful=true here means that is was trained with stateful keras_model.py
+  // stateful=false means lstm_text_generation.py
+  loadModel (stateful, baseUrl) {
     console.log('Loading model data...')
     console.time('load')
+    this.stateful = stateful
     this.model = new KerasJS.Model({
       filepaths: {
         model: baseUrl + 'inference_model.json',
@@ -25,18 +28,26 @@ class Model {
       gpu: true
     })
 
-    const indicesLoaded = $.getJSON(baseUrl + 'id2char.json').promise()
+    const indicesLoaded = $.getJSON(baseUrl + (this.stateful ? 'id2char.json' : 'char_indices.json')).promise()
     indicesLoaded.then((indices) => {
-      this.indexToChar = indices
-      this.charToIndex = {}
-      for (let i in this.indexToChar) {
-        this.charToIndex[this.indexToChar[i]] = i
+      if (this.stateful) {
+        this.indexToChar = indices
+        this.charToIndex = {}
+        for (let i in this.indexToChar) {
+          this.charToIndex[this.indexToChar[i]] = i
+        }
+      } else {
+        this.charToIndex = indices
+        this.indexToChar = {}
+        for (let i in this.charToIndex) {
+          this.indexToChar[this.charToIndex[i]] = i
+        }
       }
       console.assert(Object.keys(this.indexToChar).length === Object.keys(this.charToIndex).length)
     })
 
     let promises = [this.model.ready(), indicesLoaded]
-    if (!this.createInitialState) {
+    if (!this.createInitialState && this.stateful) {
       const initialStateLoaded = $.getJSON(baseUrl + 'initial_state.json').promise()
       promises.push(initialStateLoaded)
 
@@ -64,10 +75,17 @@ class Model {
         console.timeEnd('load')
         // check that we have 1-char inference this.model
         const shape = this.model.inputTensors.input.tensor.shape
-        console.assert(shape.length === 1)
+                console.log("shape", shape)
+        if (this.stateful) {
+          console.assert(shape.length === 1)
+        } else {
+          console.assert(shape.length === 2)
+          console.assert(shape[1] === Object.keys(this.charToIndex).length)
+        }
         console.assert(shape[0] === 1)
+
         this.inputData = {
-          'input': new Float32Array(shape[0])
+          'input': new Float32Array(shape.reduce((a, b) => a * b))
         }
 
         console.log('Ready to predict')
@@ -136,19 +154,28 @@ class Model {
     return this.indexToChar[index]
   }
 
+  _setInput(c) {
+    const index = this.charToIndex[c]
+    if (this.stateful) {
+      this.inputData.input[0] = index
+    } else {
+      this.inputData.input.fill(0)
+      this.inputData.input[index] = 1
+    }
+  }
+
   // Returns promise for next predicted character
   async _predictNext () {
     let outputData = await this.model.predict(this.inputData)
     this.isInInitialCondition = false
     let c = this._sample(outputData.output)
 
-    this.inputData.input[0] = this.charToIndex[c]
-    console.assert(this.indexToChar[this.inputData.input[0]] === c)
+    this._setInput(c)
 
     return c
   }
 
-  // Returns generator that returns promises for predicted characters
+  // Returns a generator that returns promises for predicted characters
   * predict (inputText) {
     if (this.predictionRunning) {
       return
@@ -160,7 +187,12 @@ class Model {
       // use the Kalevala opening words as seed to the state
       inputText = seed
     } else {
-      this._loadModelState(this.stateInTheBeginningOfLine)
+      if (this.stateful) {
+        this._loadModelState(this.stateInTheBeginningOfLine)
+      } else {
+        this._clearModel()
+      }
+
       if (!inputText && this.isInInitialCondition) {
         // if there is not input text and model is it's initial state,
         // its probably better to feed in some something familiar instead of null character.
@@ -173,15 +205,15 @@ class Model {
         let c = inputText[offset]
 
         if (c in this.charToIndex) {
-          this.inputData.input[0] = this.charToIndex[c]
+          this._setInput(c)
         } else {
           console.log('unsupported char', c, c.charCodeAt(0))
-          this.inputData.input[0] = 0
+          continue
         }
       }
       // yield also these seed results so that promise can be waited
       // before next char is fed in
-      yield {isPredicted: (offset + 1 < inputText.length), promise: this._predictNext()}
+      yield {isPredicted: !(offset + 1 < inputText.length), promise: this._predictNext()}
     }
 
     let prevC

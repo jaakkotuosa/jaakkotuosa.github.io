@@ -167,7 +167,7 @@ function predict()
 $(document).ready(function () {
   $('#userInput').focus()
   createDecoration();
-  model.loadModel('https://jaakkotuosa.github.io/ainamoinen/inference_model/').then(listenForChanges)
+  model.loadModel(false, 'https://jaakkotuosa.github.io/ainamoinen/stateless_model/').then(listenForChanges)
 })
 //]]>
 </script>
