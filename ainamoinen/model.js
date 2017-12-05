@@ -4,6 +4,9 @@ KerasJS.Tensor.prototype.deepCopy = function () {
   return new KerasJS.Tensor(this.tensor.data, [this.tensor.shape[0]])
 }
 
+const blankMarker = String.fromCharCode(0)
+const startMarker = String.fromCharCode(1)
+
 class Model {
   constructor () {
     this.temperature = 0.1
@@ -75,7 +78,6 @@ class Model {
         console.timeEnd('load')
         // check that we have 1-char inference this.model
         const shape = this.model.inputTensors.input.tensor.shape
-                console.log("shape", shape)
         if (this.stateful) {
           console.assert(shape.length === 1)
         } else {
@@ -168,11 +170,7 @@ class Model {
   async _predictNext () {
     let outputData = await this.model.predict(this.inputData)
     this.isInInitialCondition = false
-    let c = this._sample(outputData.output)
-
-    this._setInput(c)
-
-    return c
+    return this._sample(outputData.output)
   }
 
   // Returns a generator that returns promises for predicted characters
@@ -225,6 +223,7 @@ class Model {
         break
       }
 
+      this._setInput(blankMarker)
       const c = yield {isPredicted: true, promise: this._predictNext()}
       if (this.createInitialState) {
         // wait until model has stabilized (hopefully after 100 chars)
