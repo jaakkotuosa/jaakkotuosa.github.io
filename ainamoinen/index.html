@@ -8,14 +8,15 @@
   <title>AInamoinen</title>
   <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
   <script type="text/javascript" src="https://jaakkotuosa.github.io/ainamoinen/discrete.js"></script>
-  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script>
-  <script type="text/javascript" src="model.js"></script>
+  <!--script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/keras-js/0.3.0/keras.js"></script-->
+  <script type="text/javascript" src="file:///Users/hauki/keras-js/dist/keras.min.js"></script>
+  <script type="text/javascript" src="model_mbp.js"></script>
 
 <style type="text/css">
 #userInput {
   color: blue;
   border-bottom: 1px solid gray;
-  padding-left: 2px;
+  padding-left: 6px;
 }
 
 #predicted {
@@ -109,7 +110,7 @@ function listenForChanges () {
       let textToAdd = $(this).text() + $('#predicted').text() + "<br/>"
       $('#readyText').append(textToAdd)
       $(this).html('')
-      model.startPredictionsFromCurrentState()
+      //model.startPredictionsFromCurrentState()
     } else {
       predict()
     }
@@ -128,7 +129,7 @@ function predict()
 {
   $('#predicted').text('')
 
-  let inputText = $('#userInput').text()
+  let inputText = $('#readyText').text() + $('#userInput').text()
   inputText = inputText.toLowerCase()
   // replace &nbsp with normal space
   inputText = inputText.replace(/\u00A0/g, ' ')
