@@ -1,0 +1,69 @@
+#userInput {
+  color: blue;
+  border-bottom: 1px solid gray;
+  padding-left: 10px;
+}
+
+#predicted {
+  color: gray;
+}
+
+#readyText {
+  color: black;
+  padding-left: 10px;
+}
+
+body {
+  background-color: #faf4d7;
+  color: #5f2011;
+  margin-left: 10%;
+  margin-right: 10%;
+  font-family: serif;
+}
+
+div {
+  margin-top: 1em;
+}
+
+a {
+  color: inherit;
+}
+
+.content {
+  margin-left: 10%;
+}
+
+.decoration {
+  position: fixed;
+  top: 0px;
+  line-height: 75%;
+  margin-top: 0;
+  font-family: monospace;
+}
+
+#decorationLeft {
+  left: 10px;  
+}
+
+#decorationRight {
+  right: 10px;  
+}
+#temperatureSlider {
+  margin-left: 1em;
+  margin-right: 1em;
+  vertical-align: middle;
+}
+#temperatureDiv {
+  position: fixed;
+  bottom: 10%;
+  right: 10%;
+  border: 1px solid #5f2011;
+  border-radius: 1em;
+  padding: 1em;
+}
+#temperatureDiv h3 {
+  text-align: center;
+}
+#activeText {
+  margin-top: 0em;
+}
