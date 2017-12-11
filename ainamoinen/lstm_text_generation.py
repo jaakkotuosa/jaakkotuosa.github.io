@@ -1,38 +1,51 @@
-'''Example script to generate text from Nietzsche's writings.
-At least 20 epochs are required before the generated text
-starts sounding coherent.
-It is recommended to run this script on GPU, as recurrent
-networks are quite computationally intensive.
-If you try this script on new data, make sure your corpus
-has at least ~100k characters. ~1M is better.
-'''
 
 from __future__ import print_function
 from keras.models import Sequential
 from keras.layers import Dense, Activation
-from keras.layers import LSTM
+from keras.layers import LSTM, Dropout
 from keras.optimizers import RMSprop, Adam
 from keras.utils.data_utils import get_file
+from keras.utils import multi_gpu_model
 import numpy as np
 import random
 import sys
+import json
 
 text = open('ainamoinen.txt').read().lower()
 print('corpus length:', len(text))
 
 chars = sorted(list(set(text)))
 print('total chars:', len(chars))
+blank_marker = '\0'
+start_marker = '\1'
+chars.append(blank_marker)
+chars.append(start_marker)
 char_indices = dict((c, i) for i, c in enumerate(chars))
 indices_char = dict((i, c) for i, c in enumerate(chars))
 
+with open('models/char_indices.json', 'w') as f:
+    f.write(json.dumps(char_indices))
+
 # cut the text in semi-redundant sequences of maxlen characters
 maxlen = 40
-step = 3
+step = 6
 sentences = []
 next_chars = []
+used_fragments = set()
 for i in range(0, len(text) - maxlen, step):
-    sentences.append(text[i: i + maxlen])
-    next_chars.append(text[i + maxlen])
+    for j in range(1, maxlen - 2, 2):
+        fragment = text[i: i + j]
+        assert(len(fragment) == j)
+        if fragment not in used_fragments:
+            used_fragments.add(fragment)
+            assert(maxlen - 1 - j > 0)
+            sentence = start_marker * (maxlen - 1 - j) + fragment + blank_marker
+            assert(len(sentence) == maxlen)
+            sentences.append(sentence)
+            next_chars.append(text[i + j])
+            if len(sentences) < 100:
+                print(fragment, '->', text[i + j])
+
 print('nb sequences:', len(sentences))
 
 print('Vectorization...')
@@ -44,18 +57,19 @@ for i, sentence in enumerate(sentences):
     y[i, char_indices[next_chars[i]]] = 1
 
 
-# build the model: a single LSTM
 print('Build model...')
 model = Sequential()
-model.add(LSTM(512, return_sequences=True, input_shape=(maxlen, len(chars))))
-model.add(LSTM(512, return_sequences=True))
-model.add(LSTM(512))
+recurrent_init = 'zeros' # use zeros because keras-js didn't seem to have initializers for kernel state (at least in 0.3.0)
+kernel_init = 'glorot_uniform' # can't use zeros here, did not converge, hopefully affect the training only
+model.add(LSTM(256, return_sequences=True, input_shape=(maxlen, len(chars)), kernel_initializer=kernel_init, recurrent_initializer=recurrent_init))
+model.add(LSTM(256, input_shape=(maxlen, len(chars)), kernel_initializer=kernel_init, recurrent_initializer=recurrent_init))
 model.add(Dense(len(chars)))
 model.add(Activation('softmax'))
 
-# this exploded
-#optimizer = RMSprop(lr=0.01)
-optimizer = Adam()
+# Had some issue saving the model with this multi-gpu model, pity.
+#model = multi_gpu_model(model, gpus=2)
+
+optimizer = Adam() #RMSprop(lr=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=optimizer)
 
 
@@ -69,44 +83,43 @@ def sample(preds, temperature=1.0):
     return np.argmax(probas)
 
 # train the model, output generated text after each iteration
-for iteration in range(1, 100):
+for iteration in range(1, 1000):
     print()
     print('-' * 50)
     print('Iteration', iteration)
     model.fit(x, y,
-              batch_size=256,
-              shuffle=true, # let's randomize the input data at this point
-              epochs=5)
+              batch_size=1024,
+              epochs=1)
 
+    model.save('models/model' + str(iteration)+'.h5')
     model.save_weights('models/model' + str(iteration)+'.hdf5')
     with open('models/model' + str(iteration)+'.json', 'w') as f:
         f.write(model.to_json())
 
     start_index = random.randint(0, len(text) - maxlen - 1)
 
-    for diversity in [0.2, 0.5, 1.0, 1.2]:
+    for diversity in [0.2, 1.0]:
         print()
         print('----- diversity:', diversity)
 
-        generated = ''
-        sentence = text[start_index: start_index + maxlen]
-        generated += sentence
+        sentence = text[start_index: start_index + 10]
         print('----- Generating with seed: "' + sentence + '"')
-        sys.stdout.write(generated)
+        sys.stdout.write(sentence)
 
-        for i in range(400):
+
+        for i in range(80):
             x_pred = np.zeros((1, maxlen, len(chars)))
-            for t, char in enumerate(sentence):
+
+            input = start_marker * (maxlen - len(sentence) - 1) + sentence + blank_marker
+            for t, char in enumerate(input):
                 x_pred[0, t, char_indices[char]] = 1.
 
             preds = model.predict(x_pred, verbose=0)[0]
             next_index = sample(preds, diversity)
             next_char = indices_char[next_index]
 
-            generated += next_char
-            sentence = sentence[1:] + next_char
+            sentence = sentence[-(maxlen-2):] + next_char
 
             sys.stdout.write(next_char)
             sys.stdout.flush()
         print()
-
