@@ -1,11 +1,14 @@
 ---
 layout: post
+title:  "AInamoinen"
+date:   2017-12-12 12:15:29 +0200
+categories: demo
 image: "https://jaakkotuosa.github.io/ainamoinen/screenshot.jpg"
 ---
 
 # AInamoinen - Kalevala text generation
 
-See the demo [here](index.html). This post describes my learning exprience making this demo.
+See the demo [here](https://jaakkotuosa.github.io/ainamoinen/index.html). This post describes my learning exprience making this demo.
 
 ## Background story
 
@@ -27,7 +30,7 @@ But first, the input data.
 I found material from [Harri Perälä's website](http://www.sci.fi/~alboin/trokeemankeli/kalevalamitta-aineistoja.htm).
 Choosing [the stripped down version of Kalevala](http://www.iki.fi/harri.perala/trokeemankeli/kalevala_vain_sakeet.txt)
 and [Kanteletar](http://www.iki.fi/harri.perala/trokeemankeli/kanteletar_karsittu.txt) 
-I obtained [input material](./ainamoinen.txt) of around 1MB, not quite as large I was hoping for,
+I obtained [input material](https://jaakkotuosa.github.io/ainamoinen/ainamoinen.txt) of around 1MB, not quite as large I was hoping for,
 but I decided to go with it. To simplify the learning task, I lowercased the file and
 removed some accidental characters (like '<'). In the end the vocabulary size was 37 characters. 
 
@@ -62,7 +65,7 @@ but I resorted to removing offending postfix from json with sed.
 ## Training
 During the process I ran the training quite many times with different hyperparameters.
 Two times I even got the model to diverge when using RMSprop optimizer, Adam seemed to work quite well out of the box 
-(as advertized by [Andrew Ng](https://www.coursera.org/learn/deep-neural-network) ).
+(as advertized by [Andrew Ng](https://www.coursera.org/learn/deep-neural-network)).
 
 I was focusing quite a lot how well the models could correctly open and close quotes.
 I was expecting something like:
@@ -136,7 +139,7 @@ During debugging the text generation I noticed that weights produced by original
 The full size model produced sensible output consistenly from the beginning of the prediction,
 so I started using those although they're much slower.
 As a last touch I updated to latest keras and keras-js for good measure.
-[The latest version of the training script.] (./lstm_text_generation.py) 
+[The latest version of the training script.](https://jaakkotuosa.github.io/ainamoinen/lstm_text_generation.py)
 
 ## Conclusion
 After a lot of tinkering with models and state management, I have demo that somewhat works (at least in Chrome on my machine :).

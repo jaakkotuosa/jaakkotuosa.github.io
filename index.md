@@ -3,5 +3,5 @@
 # Edit theme's home layout instead if you wanna make some changes
 # See: https://jekyllrb.com/docs/themes/#overriding-theme-defaults
 layout: home
-image: "https://jaakkotuosa.github.io/assets/images/screenshot.jpg"
+image: "https://jaakkotuosa.github.io/ainamoinen/screenshot.jpg"
 ---
